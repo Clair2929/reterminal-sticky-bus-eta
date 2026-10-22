@@ -6,14 +6,15 @@ A bus arrival ETA app for the reTerminal Sticky (ESP32-S3 + e-paper). On boot it
 
 > Built on top of Seeed's official [Sticky Dashboard Demo](https://www.seeedstudio.com/sticky/docs/zh/device-guide/esp-basics/), keeping its device-driver layering.
 
-## Pages (4, switch with UP/DOWN buttons or horizontal swipe)
+## Pages (3, switch with UP/DOWN buttons or horizontal swipe)
 
 | Page | Content | Data source | Refresh |
 | --- | --- | --- | --- |
 | **Bus** (default) | Big clock, weekday/date, pin icon + stop name, bus icon, arrival list, WiFi/battery status icons | background `bus_eta` task + RTC + BQ27220 | see below |
-| **Sensor** | SHT40 temperature & humidity | read on page enter | on enter / AI-press refresh |
-| **Battery** | BQ27220 percentage + charging bolt icon | read on page enter | on enter / AI-press refresh |
-| **WiFi Config** | AP scan list, SSID/PWD rows, virtual keyboard, connection status | GT911 touch + `esp_wifi` scan + NVS | see below |
+| **Setup** | City/provider, station name, Station ID and optional refresh interval; on-screen keyboard | GT911 touch + stop lookup + NVS | see Bus Setup page below |
+| **WiFi** | AP scan list, SSID/password rows, virtual keyboard and connection state | GT911 touch + `esp_wifi` scan + NVS | see WiFi Config page below |
+
+Navigation order: **Bus → Setup → WiFi → Bus** with `DOWN`; `UP` moves in reverse. Horizontal swipes follow the same order.
 
 ### Bus Setup page
 
@@ -80,7 +81,7 @@ Written by both the device config page and the Playground web flasher:
 | Singapore busrouter.sg | `https://arrivelah2.busrouter.sg/?id=<stop>` | `services[]`: `no`, `next.time` (HH:MM), `next.duration_ms` |
 | Hong Kong KMB | `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/<stop>` | `data[]`: `route`, `eta` (ISO time, `eta_seq==1` only), minutes computed with `BUS_UTC_OFFSET_SECONDS` |
 
-## WiFi Config page
+## WiFi page
 
 ### Layout
 
@@ -185,7 +186,7 @@ Notes:
 | short-press `AI` | refresh current page |
 | long-press `AI` (~2 s) | beep + deep sleep; press `AI` to wake and restore page |
 | no hardware button press for 1 hour | show `Sleep...` with a bus-stop sign, then enter deep sleep; press the refresh/AI key to wake to Bus and refresh data |
-| tap on WiFi Config page | select input row / AP / keyboard key |
+| tap on WiFi page | select input row / AP / keyboard key |
 
 ## Project layout
 

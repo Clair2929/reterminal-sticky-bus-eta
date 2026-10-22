@@ -30,14 +30,15 @@
 
 ## 页面说明
 
-共 4 个页面，按 `UP`/`DOWN` 按键或左右滑动切换：
+共 3 个页面，按 `UP`/`DOWN` 按键或左右滑动切换：
 
 | 页面 | 内容 | 数据来源 | 更新时机 |
 | --- | --- | --- | --- |
 | **Bus**（默认页） | 大时钟、星期/日期、定位图标 + 站名、公交图标、线路到站列表、右上角 WiFi/电池状态 | 后台 `bus_eta` 任务 + RTC + BQ27220 | 见下方「Bus 页更新逻辑」 |
-| **Sensor** | SHT40 温度和湿度 | 进入页面时现场读取 `sticky_sht40_read()` | 进入页面 / 刷新时 |
-| **Battery** | BQ27220 电池百分比 + 充电状态（闪电图标） | 进入页面时现场读取 `sticky_battery_read()` | 进入页面 / 刷新时 |
-| **WiFi Config** | WiFi 扫描列表、SSID/密码输入、虚拟键盘、连接状态 | GT911 触摸 + `esp_wifi` 扫描 + NVS | 见下方「WiFi 配置页详解」 |
+| **Setup** | 城市/数据源、站名、Station ID、可选刷新间隔和屏幕虚拟键盘 | GT911 触摸 + 站点查询 + NVS | 见下方「Bus Setup 页面」 |
+| **WiFi** | WiFi 扫描列表、SSID/密码输入、虚拟键盘、连接状态 | GT911 触摸 + `esp_wifi` 扫描 + NVS | 见下方「WiFi 配置页详解」 |
+
+按 `DOWN` 的切换顺序为 **Bus → Setup → WiFi → Bus**；按 `UP` 反向切换，左右滑动顺序相同。
 
 ### Bus 页布局
 
@@ -119,7 +120,7 @@
 
 ## WiFi 配置页详解
 
-**入口**：按键/滑动翻到第 4 页（Bus → Sensor → Battery → WiFi Config）。
+**入口**：从 Bus 页按 `DOWN` 两次，或左右滑动切到 WiFi 页（Bus → Setup → WiFi）。
 
 ### 页面布局
 
