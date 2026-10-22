@@ -1,0 +1,15 @@
+# ESP-IDF generated files
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# IDE and local tools
+.vscode/
+.idea/
+.cache/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
