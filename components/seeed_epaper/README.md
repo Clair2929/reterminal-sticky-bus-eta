@@ -35,3 +35,4 @@
 - `epaper_panel.c`：GPIO / SPI / 像素转换 / 会话管理
 - `driver/uc8179.c`：UC8179 控制器实现
 - `driver/ssd1677.c`：SSD1677 控制器实现
+

@@ -13,3 +13,6 @@ managed_components/
 *.log
 *.tmp
 *.bak
+
+# Local component backups
+_backup/

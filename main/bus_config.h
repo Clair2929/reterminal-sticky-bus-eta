@@ -26,10 +26,12 @@
 // 公交站点 ID
 // 新加坡：DataMall 的 BusStopCode，例如 "10011"
 // 香港：KMB 站柱编码，例如 "TS000001"
-#define BUS_STOP_ID        "10011"
+// 留空表示不预设站点：全新烧录/清空 NVS 后首页不显示默认站点名，
+// 由用户在 Bus Setup 页输入 ID 或站名后解析并保存。
+#define BUS_STOP_ID        ""
 
-// 站点显示名称（左上角大字显示）
-#define BUS_STOP_NAME      "Bef Neil Rd"
+// 站点显示名称（左上角大字显示）；与 BUS_STOP_ID 一致，留空不预设。
+#define BUS_STOP_NAME      ""
 
 // 自动刷新间隔（秒），范围 30 ~ 3600。
 // 这是编译期兜底值；运行时可用 NVS 键 refreshSeconds（i32）覆盖，

@@ -1,6 +1,6 @@
 # reTerminal Sticky Bus ETA
 
-[中文](README-ZH.md)
+[中文](README-ZH.md) · [Changelog](CHANGELOG.md)
 
 A bus arrival ETA app for the reTerminal Sticky (ESP32-S3 + e-paper). On boot it connects to WiFi, syncs time (NTP + RTC), periodically fetches bus arrival data from a public API and renders it on the e-paper. A device-side WiFi config page lets you scan hotspots, type SSID/password on the touchscreen, save to NVS and reboot into the new config. A Bus Setup page lets you choose the city (Singapore / Hong Kong) and type the stop name/ID on the touchscreen without re-flashing.
 
@@ -19,8 +19,8 @@ Navigation order: **Bus → Setup → WiFi → Bus** with `DOWN`; `UP` moves in 
 ### Bus Setup page
 
 - The City, Name, Station ID and Refresh rows are enlarged and spaced down the left side; the enlarged 10×5 keyboard is arranged on the right.
-- Station setup can save Name and/or Station ID; at least one is needed when changing the station. If a Station ID is entered, its online lookup is authoritative and replaces any typed name with the directory name. A name alone is looked up to fill the ID. If ID lookup cannot reach the service, saving is stopped so an unverified name is not stored beside that ID.
-- Refresh is optional and can be saved by itself. When the displayed station settings are left unchanged, saving a refresh interval updates only that interval and preserves the provider, name and Station ID. Clear Refresh to keep the saved interval; if none is saved, firmware default is used. A supplied value must be 1–60 whole minutes.
+- Station setup can save Name and/or Station ID; at least one is needed when changing the station. If a Station ID is entered, its online lookup is authoritative and replaces any typed name with the directory name. A name alone is looked up to fill the ID. If the lookup cannot reach any directory source, saving is stopped so an unverified name is not stored beside that ID.
+- Refresh is required: it must be a whole number 1–60 minutes. When only the station settings are left unchanged, saving updates just the refresh interval and preserves the provider, name and Station ID.
 - `SAVE` writes `busProvider` (`singapore` / `hongkongkmb`), resolved `busName` and `busId` to NVS, shows `Saved! Rebooting...` and auto-reboots after 1.5 s.
 - Saved values are backfilled from NVS on startup, so you can confirm the active city/stop at a glance.
 - Like the WiFi page, this page uses partial refresh; a full monochrome refresh is inserted every 25 partial refreshes to clear A2 ghosting.
@@ -65,12 +65,14 @@ Written by both the device config page and the Playground web flasher:
 #define BUS_WIFI_SSID        "YOUR_WIFI_SSID"   // placeholder; set yours locally
 #define BUS_WIFI_PASSWORD    ""
 #define BUS_USE_SINGAPORE    1                  // 1 = Singapore, 0 = HK KMB
-#define BUS_STOP_ID          "10011"
-#define BUS_STOP_NAME        "Bef Neil Rd"
+#define BUS_STOP_ID          ""                 // blank = no preset stop
+#define BUS_STOP_NAME        ""                 // blank = no preset stop name
 #define BUS_REFRESH_SECONDS  120                // default interval (NVS refreshSeconds overrides)
 #define BUS_NTP_SERVER       "pool.ntp.org"
 #define BUS_UTC_OFFSET_SECONDS (8 * 3600)       // SGT/HKT are both UTC+8
 ```
+
+> `BUS_STOP_ID` / `BUS_STOP_NAME` are intentionally blank: a fresh flash (or erased NVS) shows no preset stop name, and an empty Station ID does not fetch a bogus `?id=` request — the Bus page shows `Set station in Bus Setup` until you save a stop.
 
 > ⚠️ **No-secrets rule**: keep placeholders before publishing to the Playground registry — never commit real WiFi passwords.
 
@@ -79,7 +81,10 @@ Written by both the device config page and the Playground web flasher:
 | Source | Endpoint | Parsing |
 | --- | --- | --- |
 | Singapore busrouter.sg | `https://arrivelah2.busrouter.sg/?id=<stop>` | `services[]`: `no`, `next.time` (HH:MM), `next.duration_ms` |
+| Singapore stop directory | mirrored, in priority order: `https://cdn.jsdelivr.net/gh/cheeaun/sgbusdata@main/data/v1/stops.min.json` → `https://raw.githubusercontent.com/cheeaun/sgbusdata/main/data/v1/stops.min.json` → `https://data.busrouter.sg/v1/stops.min.json` | `{"<code>":[lng,lat,"name","road"],...}`; used by Bus Setup to resolve ID→name and name→ID |
 | Hong Kong KMB | `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/<stop>` | `data[]`: `route`, `eta` (ISO time, `eta_seq==1` only), minutes computed with `BUS_UTC_OFFSET_SECONDS` |
+
+The Singapore stop directory is fetched from stable RSA-served CDN mirrors first (same class as `arrivelah2`); the original CloudFront/ECDSA `data.busrouter.sg` endpoint is kept only as the last fallback.
 
 ## WiFi page
 
@@ -130,7 +135,7 @@ SFT z  x  c  v  b  n  m [BS]
 | Trigger | Behavior |
 | --- | --- |
 | Enter page | trigger an immediate scan; backfill saved SSID/password from NVS |
-| Scan task | starts 3 s after boot, then every 20 s; **skips full redraw if you typed within the last 3 s** so input is not interrupted (data still updates, shows on next keypress) |
+| Scan task | starts 3 s after boot, then every 20 s, **but only while the WiFi Config page is active** (leaving the page pauses scanning so background downloads/connections are not interrupted); **skips full redraw if you typed within the last 3 s** so input is not interrupted (data still updates, shows on next keypress) |
 | Tap row / AP / key | update state, full redraw |
 | WiFi connected/disconnected event | updates `Connected:` line immediately |
 

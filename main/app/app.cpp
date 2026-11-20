@@ -29,6 +29,7 @@ constexpr uint32_t kSavedStateMagic = 0x53544943U;  // "STIC"
 RTC_NOINIT_ATTR uint32_t s_saved_state_magic;
 RTC_NOINIT_ATTR uint8_t s_saved_state[sizeof(AppState)];
 TickType_t s_last_button_activity_tick = 0;
+// 无按键/触摸操作 1 小时后自动进入 deep sleep
 constexpr TickType_t kIdleSleepTimeoutTicks = pdMS_TO_TICKS(60UL * 60UL * 1000UL);
 
 // 当前激活页面：触摸回调（在 GT911 任务上下文）据此判断是否需要处理
@@ -78,6 +79,11 @@ void app_handle_touch_tap(uint16_t x, uint16_t y)
     } else if (s_active_page == PageId::BusConfig) {
         bus_config_page_handle_tap(x, y);
     }
+}
+
+bool app_page_is_active(PageId page)
+{
+    return s_active_page == page;
 }
 
 esp_err_t refresh_current_page(const AppState &state)
@@ -239,7 +245,8 @@ esp_err_t handle_app_event(Canvas &canvas,
 
     if (event == AppEvent::EnterDeepSleep || event == AppEvent::AutoSleep) {
         const bool automatic = event == AppEvent::AutoSleep;
-        ESP_LOGI(kTag, "Preparing for deep sleep");
+        ESP_LOGI(kTag, "Preparing for deep sleep (%s)",
+                 automatic ? "idle timeout" : "button long press");
         if (automatic) {
             state.current_page = PageId::Bus;
         } else {
@@ -251,13 +258,22 @@ esp_err_t handle_app_event(Canvas &canvas,
         }
         save_app_state_for_deep_sleep(state);
         sleep_page_render(&canvas);
-        ESP_RETURN_ON_ERROR(
-            sticky_display_refresh_monochrome(),
-            "app", "refresh deep sleep page");
-        ESP_RETURN_ON_ERROR(
-            sticky_touch_stop(), "app", "stop touch polling");
-        ESP_RETURN_ON_ERROR(
-            sticky_display_sleep(), "app", "sleep display");
+        // 休眠链路不因单步失败而中断：否则自动休眠会每秒重试却永远进不去
+        const esp_err_t refresh_result = sticky_display_refresh_monochrome();
+        if (refresh_result != ESP_OK) {
+            ESP_LOGW(kTag, "Refresh deep sleep page failed: %s",
+                     esp_err_to_name(refresh_result));
+        }
+        const esp_err_t touch_result = sticky_touch_stop();
+        if (touch_result != ESP_OK) {
+            ESP_LOGW(kTag, "Stop touch polling failed: %s",
+                     esp_err_to_name(touch_result));
+        }
+        const esp_err_t display_result = sticky_display_sleep();
+        if (display_result != ESP_OK) {
+            ESP_LOGW(kTag, "Sleep display failed: %s",
+                     esp_err_to_name(display_result));
+        }
         sticky_power_enter_deep_sleep();
     }
 

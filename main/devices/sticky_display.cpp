@@ -9,6 +9,7 @@
 #include "epaper_panel.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "pin_config.h"
@@ -126,9 +127,19 @@ esp_err_t sticky_display_init()
     panel_config.busy_level = 1;
     panel_config.enable_level = 1;
     panel_config.mirror_x = true;
+    // The controller model is resolved automatically in the driver layer:
+    // SPI chip ID first, then the BUSY idle level (SSD1677 idle low, SSD2677
+    // idle high). SSD1677 is only the requested fallback.
     ESP_RETURN_ON_ERROR(
         seeed_epaper_new_panel(SEEED_EPAPER_PANEL_SSD1677, &panel_config, &s_panel),
-        "sticky_display", "create SSD1677 panel");
+        "sticky_display", "create panel");
+
+    seeed_epaper_panel_model_t resolved_model = SEEED_EPAPER_PANEL_SSD1677;
+    if (seeed_epaper_panel_get_model(s_panel, &resolved_model) == ESP_OK) {
+        ESP_LOGI("sticky_display",
+                 "panel model resolved: %s",
+                 resolved_model == SEEED_EPAPER_PANEL_SSD2677 ? "SSD2677" : "SSD1677");
+    }
 
     s_framebuffer = static_cast<uint8_t *>(
         heap_caps_malloc(kFramebufferSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));

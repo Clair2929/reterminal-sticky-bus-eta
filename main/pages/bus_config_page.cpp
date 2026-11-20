@@ -7,6 +7,7 @@
 
 #include "app_event.h"
 #include "app_state.h"
+#include "bus_config.h"
 #include "canvas.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -19,18 +20,18 @@ namespace {
 
 constexpr char kTag[] = "bus_cfg";
 
-// 左栏布局（与 WiFi 配置页一致）：四行输入/选择框
+// 左栏布局（与 WiFi 配置页一致）：四行输入/选择框，放大并均匀铺满整屏高度
 constexpr int kTitleX = 16;
-constexpr int kTitleY = 14;
+constexpr int kTitleY = 12;
 
 constexpr int kRowX = 16;
-constexpr int kRowW = 320;
-constexpr int kRowH = 52;
+constexpr int kRowW = 330;
+constexpr int kRowH = 84;
 
-constexpr int kCityY = 66;
-constexpr int kNameY = 130;
-constexpr int kIdY = 194;
-constexpr int kRefreshY = 258;
+constexpr int kCityY = 54;
+constexpr int kNameY = 152;
+constexpr int kIdY = 250;
+constexpr int kRefreshY = 348;
 
 // 刷新频率范围：1~60 分钟（对应 NVS refreshSeconds 的 60~3600 秒，与
 // user_config.cpp 的 30~3600 秒校验兼容）
@@ -39,17 +40,17 @@ constexpr int kRefreshMaxMinutes = 60;
 
 // 键盘：与 WiFi 配置页完全相同的布局
 constexpr int kKeyX = 350;
-constexpr int kKeyY = 66;
+constexpr int kKeyY = 54;
 constexpr int kKeyColW = 41;
 constexpr int kKeyColGap = 2;
-constexpr int kKeyRowH = 54;
+constexpr int kKeyRowH = 64;
 constexpr int kKeyRowGap = 5;
 constexpr int kKeyCols = 10;
 constexpr int kKeyRows = 5;
 
-// 右下角状态区：HH:MM 时钟（右上角 (670,52) 与键盘第一行重叠会被盖住）
+// 右上角状态区：HH:MM 时钟（键盘从 y=54 开始，上方留白正好放时钟）
 constexpr int kClockX = 700;
-constexpr int kClockY = 440;
+constexpr int kClockY = 14;
 
 // 输入目标：Station Name / Station ID / 刷新频率（City 行是点击切换，不进入键盘）
 enum class InputTarget {
@@ -224,12 +225,19 @@ void load_saved_config()
     // 刷新频率：NVS 存的是秒（refreshSeconds），页面上用分钟显示/输入
     int32_t refresh_seconds = 0;
     if (nvs_get_i32(handle, "refreshSeconds", &refresh_seconds) == ESP_OK &&
-        refresh_seconds >= 60) {
-        std::snprintf(s_ui.refresh_buf, sizeof(s_ui.refresh_buf), "%d",
-                      static_cast<int>(refresh_seconds / 60));
+        refresh_seconds >= 30) {
+        int minutes = static_cast<int>(refresh_seconds / 60);
+        if (minutes < kRefreshMinMinutes) {
+            minutes = kRefreshMinMinutes;  // 30s 之类的旧值按 1 分钟显示
+        }
+        std::snprintf(s_ui.refresh_buf, sizeof(s_ui.refresh_buf), "%d", minutes);
     } else {
-        // Empty means keep the configured/default interval when saving.
-        s_ui.refresh_buf[0] = '\0';
+        // 没有保存过刷新频率：用固件默认值预填，避免必选项空着
+        const int default_minutes = BUS_REFRESH_SECONDS / 60 > 0
+                                        ? BUS_REFRESH_SECONDS / 60
+                                        : 1;
+        std::snprintf(s_ui.refresh_buf, sizeof(s_ui.refresh_buf), "%d",
+                      default_minutes);
     }
     nvs_close(handle);
     std::snprintf(s_ui.loaded_bus_name, sizeof(s_ui.loaded_bus_name), "%s",
@@ -322,6 +330,10 @@ void resolve_and_save_task(void *arg)
         p.use_singapore, p.bus_id, sizeof(p.bus_id),
         p.bus_name, sizeof(p.bus_name));
 
+    ESP_LOGI(kTag, "Resolve(%s) result=%d id='%s' name='%s'",
+             p.use_singapore ? "sg" : "kmb", static_cast<int>(resolve_result),
+             p.bus_id, p.bus_name);
+
     // 解析结果写回 UI（保存后 1.5s 重启，期间的新输入随重启丢弃）
     std::memcpy(s_ui.bus_id, p.bus_id, sizeof(s_ui.bus_id));
     std::memcpy(s_ui.bus_name, p.bus_name, sizeof(s_ui.bus_name));
@@ -371,36 +383,34 @@ void resolve_and_save_task(void *arg)
 
 void request_save()
 {
-    // Empty refresh interval keeps the existing NVS value or firmware default.
-    if (s_ui.refresh_buf[0] != '\0') {
-        char *refresh_end = nullptr;
-        const long refresh_minutes =
-            std::strtol(s_ui.refresh_buf, &refresh_end, 10);
-        if (refresh_end == s_ui.refresh_buf || *refresh_end != '\0' ||
-            refresh_minutes < kRefreshMinMinutes ||
-            refresh_minutes > kRefreshMaxMinutes) {
-            std::snprintf(s_ui.status, sizeof(s_ui.status),
-                          "Refresh 1-%d min or blank", kRefreshMaxMinutes);
-            app_event_post(AppEvent::RefreshPage);
-            return;
-        }
+    // 刷新频率为必选项：留空或不是 1~60 的整数都直接拒绝保存
+    char *refresh_end = nullptr;
+    const long refresh_minutes =
+        std::strtol(s_ui.refresh_buf, &refresh_end, 10);
+    if (s_ui.refresh_buf[0] == '\0' || refresh_end == s_ui.refresh_buf ||
+        *refresh_end != '\0' || refresh_minutes < kRefreshMinMinutes ||
+        refresh_minutes > kRefreshMaxMinutes) {
+        std::snprintf(s_ui.status, sizeof(s_ui.status),
+                      "Refresh %d-%d min required", kRefreshMinMinutes,
+                      kRefreshMaxMinutes);
+        app_event_post(AppEvent::RefreshPage);
+        return;
     }
 
     const bool has_stop =
         s_ui.bus_name[0] != '\0' || s_ui.bus_id[0] != '\0';
-    const bool has_refresh = s_ui.refresh_buf[0] != '\0';
-    if (!has_stop && !has_refresh) {
-        std::snprintf(s_ui.status, sizeof(s_ui.status),
-                      "Set Name, Station ID or Refresh");
-        app_event_post(AppEvent::RefreshPage);
-        return;
-    }
     if (!has_stop) {
-        // Refresh-only save: leave provider, station name and ID untouched.
-        if (save_to_nvs(false)) {
-            app_event_post(AppEvent::RefreshPage);
-            schedule_reboot();
+        // 只改刷新频率：保留原有站点配置，只写入 refreshSeconds
+        if (s_ui.loaded_config_valid) {
+            if (save_to_nvs(false)) {
+                app_event_post(AppEvent::RefreshPage);
+                schedule_reboot();
+            } else {
+                app_event_post(AppEvent::RefreshPage);
+            }
         } else {
+            std::snprintf(s_ui.status, sizeof(s_ui.status),
+                          "Set Name or Station ID");
             app_event_post(AppEvent::RefreshPage);
         }
         return;
@@ -409,7 +419,7 @@ void request_save()
         s_ui.use_singapore == s_ui.loaded_use_singapore &&
         std::strcmp(s_ui.bus_name, s_ui.loaded_bus_name) == 0 &&
         std::strcmp(s_ui.bus_id, s_ui.loaded_bus_id) == 0;
-    if (has_refresh && station_config_unchanged) {
+    if (station_config_unchanged) {
         // Existing values are displayed for reference; an untouched station
         // config means this SAVE is only changing the refresh interval.
         if (save_to_nvs(false)) {
@@ -529,32 +539,34 @@ void draw_row_box(Canvas &canvas, int x, int y, bool focused)
 }
 
 void draw_input_row(Canvas &canvas, int y, const char *label,
-                    const char *value, bool focused)
+                    const char *value, bool focused, int value_scale = 2)
 {
     draw_row_box(canvas, kRowX, y, focused);
     const GrayLevel text_color = focused ? GrayLevel::White : GrayLevel::Black;
-    const bool station_id_label = std::strcmp(label, "Station ID") == 0;
-    canvas.draw_text(kRowX + 8, y + (station_id_label ? 22 : 19), label,
-                     station_id_label ? 1 : 2, text_color);
+    // 标签在上、内容在下：行高放大到 84px 后两行排布更易读
+    canvas.draw_text(kRowX + 12, y + 12, label, 2, text_color);
+
+    const int value_char_w = 6 * value_scale;
+    const int value_max_chars = (kRowW - 24) / value_char_w;
     char clipped[40] = {};
     const size_t len = std::strlen(value);
-    const size_t max_chars = 18;  // 18 字符 * 12px <= 330-100 可用宽度
+    const size_t max_chars = static_cast<size_t>(value_max_chars > 0 ? value_max_chars : 1);
     const size_t copy_len = len > max_chars ? max_chars : len;
     std::memcpy(clipped, value, copy_len);
-    if (len > max_chars) {
-        std::snprintf(clipped + copy_len, sizeof(clipped) - copy_len, "...");
+    if (len > max_chars && copy_len >= 3) {
+        std::snprintf(clipped + copy_len - 3, sizeof(clipped) - (copy_len - 3), "...");
     }
-    canvas.draw_text(kRowX + 100, y + 19, clipped[0] != '\0' ? clipped : " ",
-                     2, text_color);
+    canvas.draw_text(kRowX + 12, y + 46, clipped[0] != '\0' ? clipped : " ",
+                     value_scale, text_color);
 }
 
 // City 行：反白显示当前城市，点击即切换
 void draw_city_row(Canvas &canvas)
 {
     draw_row_box(canvas, kRowX, kCityY, true);
-    canvas.draw_text(kRowX + 8, kCityY + 19, "City", 2, GrayLevel::White);
+    canvas.draw_text(kRowX + 12, kCityY + 12, "City", 2, GrayLevel::White);
     const char *city = s_ui.use_singapore ? "Singapore" : "Hong Kong";
-    canvas.draw_text(kRowX + 100, kCityY + 19, city, 2, GrayLevel::White);
+    canvas.draw_text(kRowX + 12, kCityY + 46, city, 3, GrayLevel::White);
 }
 
 void draw_keyboard(Canvas &canvas)
@@ -622,42 +634,43 @@ void bus_config_page_render(Canvas &canvas, const AppState &state)
                    s_ui.target == InputTarget::Name);
     draw_input_row(canvas, kIdY, "Station ID", s_ui.bus_id,
                    s_ui.target == InputTarget::Id);
-    char refresh_text[24] = {};
+    char refresh_text[32] = {};
     if (s_ui.refresh_buf[0] != '\0') {
         std::snprintf(refresh_text, sizeof(refresh_text), "%s min",
                       s_ui.refresh_buf);
     } else {
-        std::snprintf(refresh_text, sizeof(refresh_text), "-- min (optional)");
+        // 刷新频率为必选项：留空则在保存时提示，而不是静默沿用旧值
+        std::snprintf(refresh_text, sizeof(refresh_text), "-- (required)");
     }
-    draw_input_row(canvas, kRefreshY, "Refresh", refresh_text,
+    draw_input_row(canvas, kRefreshY, "Refresh* 1-60 min", refresh_text,
                    s_ui.target == InputTarget::Refresh);
 
     // 虚拟键盘
     draw_keyboard(canvas);
 
     // 提示：当前输入目标
-    canvas.draw_text(kKeyX, 378, "Target:", 2, GrayLevel::Black);
+    canvas.draw_text(kKeyX, 406, "Target:", 2, GrayLevel::Black);
     const char *target_text = "Name";
     if (s_ui.target == InputTarget::Id) {
         target_text = "Station ID";
     } else if (s_ui.target == InputTarget::Refresh) {
         target_text = "Refresh";
     }
-    canvas.draw_text(kKeyX + 90, 378, target_text, 2, GrayLevel::Black);
+    canvas.draw_text(kKeyX + 90, 406, target_text, 2, GrayLevel::Black);
 
-    // High-contrast prompt/status banner in the lower-right corner.
-    canvas.fill_rect(kKeyX, 406, 430, 32, GrayLevel::Black);
-    canvas.draw_text(kKeyX + 10, 415,
+    // High-contrast prompt/status banner below the keyboard.
+    canvas.fill_rect(kKeyX, 428, 430, 30, GrayLevel::Black);
+    canvas.draw_text(kKeyX + 10, 436,
                      s_ui.status[0] != '\0'
                          ? s_ui.status
                          : "Save: Name / Station ID / Refresh",
                      2, GrayLevel::White);
 
-    // 右下角 HH:MM 时钟（与 WiFi 页一致，右上角会被键盘盖住）
+    // 右上角 HH:MM 时钟（键盘从 y=54 起，上方留白刚好容纳）
     bus_config_page_render_time(canvas, state);
 }
 
-// 右下角 HH:MM（独立于右上角的状态栏时间，每分钟由 ClockMinuteTick 局刷）
+// 右上角 HH:MM（独立于左栏状态，每分钟由 ClockMinuteTick 局刷）
 void bus_config_page_render_time(Canvas &canvas, const AppState &state)
 {
     canvas.fill_rect(kClockX - 8, kClockY - 4, 88, 28, GrayLevel::White);

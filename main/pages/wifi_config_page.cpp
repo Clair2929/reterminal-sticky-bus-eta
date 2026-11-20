@@ -7,6 +7,7 @@
 
 #include "app_event.h"
 #include "app_state.h"
+#include "app.h"
 #include "canvas.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -354,6 +355,12 @@ void wifi_scan_task(void *)
 {
     vTaskDelay(pdMS_TO_TICKS(kStartupDelayMs));
     while (true) {
+        // 仅在 WiFi 配置页运行时扫描。离开页面后该任务仍在后台存活，
+        // 若继续每 20s 扫描会频繁打断 STA 连接，导致大文件下载被重置。
+        if (!app_page_is_active(PageId::WifiConfig)) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
         wifi_mode_t mode = WIFI_MODE_NULL;
         if (esp_wifi_get_mode(&mode) == ESP_OK && mode != WIFI_MODE_NULL) {
             s_ui.scanning = true;

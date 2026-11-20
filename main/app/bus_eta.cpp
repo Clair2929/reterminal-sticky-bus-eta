@@ -428,10 +428,19 @@ void fetch_bus_data(SharedBusData &data)
     data.error = ESP_ERR_INVALID_STATE;
     data.data_valid = false;
     data.bus_count = 0;
+
+    const UserConfig &cfg = get_user_config();
+    if (cfg.bus_id[0] == '\0') {
+        // 未配置站点：不向空 ID 发起无效请求，提示用户去配置。
+        std::snprintf(data.status, sizeof(data.status),
+                      "Set station in Bus Setup");
+        data.error = ESP_ERR_NOT_FOUND;
+        return;
+    }
+
     std::snprintf(data.status, sizeof(data.status), "Fetching...");
 
     char url[192] = {};
-    const UserConfig &cfg = get_user_config();
     if (cfg.use_singapore) {
         std::snprintf(url, sizeof(url),
                       "https://arrivelah2.busrouter.sg/?id=%s", cfg.bus_id);

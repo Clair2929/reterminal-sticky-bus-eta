@@ -29,3 +29,7 @@ esp_err_t handle_app_event(Canvas &canvas,
 // Forwards a GT911 tap to the page that needs precise taps (WiFi config).
 // Called from the touch-polling task context.
 void app_handle_touch_tap(uint16_t x, uint16_t y);
+
+// True while the given page is the one currently rendered. Used by background
+// helpers (e.g. the AP scan loop) that must only run on their owning page.
+bool app_page_is_active(PageId page);

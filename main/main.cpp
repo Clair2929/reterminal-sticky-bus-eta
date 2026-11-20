@@ -2,6 +2,7 @@
 #include "app_clock.h"
 #include "app_data.h"
 #include "board.h"
+#include "bus_config_page.h"
 #include "bus_eta.h"
 #include "canvas.h"
 #include "esp_log.h"
@@ -58,6 +59,8 @@ extern "C" void app_main()
     ESP_ERROR_CHECK(sticky_touch_register_tap_callback(app_handle_touch_tap));
     // WiFi 配置页后台扫描任务（等待 bus_eta 初始化 WiFi 后自动开始）
     wifi_config_page_start();
+    // Bus 配置页：回填上次保存的 City / 站名 / 站 ID / 刷新频率
+    bus_config_page_start();
     ESP_ERROR_CHECK(sticky_buzzer_init());
     ESP_ERROR_CHECK(sticky_charger_init());
     const esp_err_t battery_init_result =

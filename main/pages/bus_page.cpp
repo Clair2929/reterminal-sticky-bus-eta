@@ -157,7 +157,8 @@ void bus_page_render(Canvas &canvas, const AppState &state)
     canvas.draw_text(40, 120, date_line, 3, GrayLevel::Black);
 
     draw_stop_name(canvas, state.bus_eta.stop_name);
-    draw_bus_icon(canvas, 40, 260);
+    // 公交图标下移：位图墨迹实际占第 48~152 行，y=276 时墨迹落在 324~428
+    draw_bus_icon(canvas, 40, 276);
 
     // --- 右列：标题 + 电池 + WiFi 图标 + 到站列表 ---
     canvas.draw_text(400, 20, "Bus ETA", 3, GrayLevel::Black);

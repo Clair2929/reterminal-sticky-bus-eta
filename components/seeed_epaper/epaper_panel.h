@@ -21,6 +21,7 @@ typedef struct seeed_epaper_panel_t *seeed_epaper_panel_handle_t;
 typedef enum {
     SEEED_EPAPER_PANEL_UC8179 = 0,
     SEEED_EPAPER_PANEL_SSD1677,
+    SEEED_EPAPER_PANEL_SSD2677,
 } seeed_epaper_panel_model_t;
 
 typedef enum {
@@ -53,8 +54,29 @@ typedef struct {
 } seeed_epaper_panel_info_t;
 
 typedef struct {
+    bool temperature_valid;
+    bool temperature_external;
+    uint8_t temperature_c;
+    uint32_t latch_ms;
+    uint32_t temperature_ms;
+    uint32_t latch_apply_ms;
+    uint32_t stream_ms;
+    uint32_t stream_command_ms;
+    uint32_t stream_encode_ms;
+    uint32_t stream_spi_ms;
+    uint32_t drive_ms;
+    uint32_t state_sync_ms;
+    uint32_t power_on_ms;
+    uint32_t power_on_settle_ms;
+    uint32_t refresh_ms;
+    uint32_t power_off_ms;
+    uint32_t power_off_settle_ms;
+} seeed_epaper_refresh_timing_t;
+
+typedef struct {
     spi_device_handle_t spi_handle;
     gpio_num_t pin_dc;
+    gpio_num_t pin_cs;
     gpio_num_t pin_rst;
     gpio_num_t pin_busy;
     gpio_num_t pin_enable;
@@ -63,6 +85,9 @@ typedef struct {
     uint16_t reset_high_ms;
     uint8_t busy_level;
     uint8_t enable_level;
+    bool busy_level_valid;
+    bool enable_level_valid;
+    bool manual_cs;
     bool mirror_x;
 } seeed_epaper_panel_config_t;
 
@@ -74,6 +99,25 @@ esp_err_t seeed_epaper_panel_del(seeed_epaper_panel_handle_t panel);
 
 esp_err_t seeed_epaper_panel_get_info(seeed_epaper_panel_handle_t panel,
                                       seeed_epaper_panel_info_t *ret_info);
+
+esp_err_t seeed_epaper_panel_get_model(seeed_epaper_panel_handle_t panel,
+                                       seeed_epaper_panel_model_t *ret_model);
+
+esp_err_t seeed_epaper_panel_get_last_refresh_timing(seeed_epaper_panel_handle_t panel,
+                                                      seeed_epaper_refresh_timing_t *ret_timing);
+
+esp_err_t seeed_epaper_panel_set_external_temperature(seeed_epaper_panel_handle_t panel,
+                                                      float temperature_c);
+
+esp_err_t seeed_epaper_panel_clear_external_temperature(seeed_epaper_panel_handle_t panel);
+
+esp_err_t seeed_epaper_panel_reset(seeed_epaper_panel_handle_t panel);
+
+esp_err_t seeed_epaper_panel_wait_ready(seeed_epaper_panel_handle_t panel);
+
+esp_err_t seeed_epaper_panel_read_register8(seeed_epaper_panel_handle_t panel,
+                                            uint8_t command,
+                                            uint8_t *ret_value);
 
 esp_err_t seeed_epaper_panel_prepare(seeed_epaper_panel_handle_t panel,
                                      seeed_epaper_refresh_mode_t mode);
@@ -116,6 +160,10 @@ esp_err_t seeed_epaper_panel_clear(seeed_epaper_panel_handle_t panel,
                                    seeed_epaper_refresh_mode_t mode);
 
 esp_err_t seeed_epaper_panel_sleep(seeed_epaper_panel_handle_t panel);
+
+esp_err_t seeed_epaper_panel_standby(seeed_epaper_panel_handle_t panel);
+
+esp_err_t seeed_epaper_panel_resume(seeed_epaper_panel_handle_t panel);
 
 esp_err_t seeed_epaper_panel_wakeup(seeed_epaper_panel_handle_t panel,
                                     seeed_epaper_refresh_mode_t mode);

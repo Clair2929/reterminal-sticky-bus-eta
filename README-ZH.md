@@ -1,6 +1,6 @@
 # reTerminal Sticky Bus ETA
 
-[English](README.md)
+[English](README.md) · [更新日志](CHANGELOG.md)
 
 一个跑在 reTerminal Sticky（ESP32-S3 + 电子纸）上的公交到站提醒应用。设备上电后自动连接 WiFi、同步时间（NTP + RTC），周期性从公交 API 拉取线路到站时间并显示在电子纸上；同时提供设备端的 WiFi 配置页，可以在屏幕上直接输入/修改 WiFi 和公交站点信息。
 
@@ -35,7 +35,7 @@
 | 页面 | 内容 | 数据来源 | 更新时机 |
 | --- | --- | --- | --- |
 | **Bus**（默认页） | 大时钟、星期/日期、定位图标 + 站名、公交图标、线路到站列表、右上角 WiFi/电池状态 | 后台 `bus_eta` 任务 + RTC + BQ27220 | 见下方「Bus 页更新逻辑」 |
-| **Setup** | 城市/数据源、站名、Station ID、可选刷新间隔和屏幕虚拟键盘 | GT911 触摸 + 站点查询 + NVS | 见下方「Bus Setup 页面」 |
+| **Setup** | 城市/数据源、站名、Station ID、必填刷新间隔和屏幕虚拟键盘 | GT911 触摸 + 站点查询 + NVS | 见下方「Bus Setup 页面」 |
 | **WiFi** | WiFi 扫描列表、SSID/密码输入、虚拟键盘、连接状态 | GT911 触摸 + `esp_wifi` 扫描 + NVS | 见下方「WiFi 配置页详解」 |
 
 按 `DOWN` 的切换顺序为 **Bus → Setup → WiFi → Bus**；按 `UP` 反向切换，左右滑动顺序相同。
@@ -76,8 +76,8 @@
 - City、Name、Station ID、Refresh 输入框已加大并纵向均匀排列，右侧为放大的 10×5 虚拟键盘。
 - 配置站点时可填写 Name 和/或 Station ID，至少需要一个。填写 Station ID 时，以在线查询到的站点名称为准，会覆盖手动输入的名称；只填名称时会反查并补全 ID。
 - Station ID 查询遇到网络错误时会提示重试，不会把未经验证的手填名称与该 ID 一起保存。请确认 WiFi 在线后再保存。
-- Refresh 可单独保存，不必同时配置站点。站点信息保持原样时，只更新刷新间隔，不会覆盖数据源、站名或 Station ID。留空时保留已有刷新间隔；若没有已保存值，则使用固件默认值。填写时必须是 1–60 的整数分钟。
-- 保存成功后将站点来源、标准站名、ID 和（若填写）刷新间隔写入 NVS，并在 1.5 秒后重启。
+- Refresh 为必填项，必须是 1–60 的整数分钟。站点信息保持原样时，只更新刷新间隔，不会覆盖数据源、站名或 Station ID。
+- 保存成功后将站点来源、标准站名、ID 和刷新间隔写入 NVS，并在 1.5 秒后重启。
 
 ## 配置系统
 
@@ -102,21 +102,26 @@
 #define BUS_WIFI_SSID      "YOUR_WIFI_SSID"   // 占位符，本地开发改成自己的
 #define BUS_WIFI_PASSWORD  ""
 #define BUS_USE_SINGAPORE  1                   // 1=新加坡 0=香港KMB
-#define BUS_STOP_ID        "10011"
-#define BUS_STOP_NAME      "Bef Neil Rd"
+#define BUS_STOP_ID        ""                  // 留空 = 无预置站点
+#define BUS_STOP_NAME      ""                  // 留空 = 无预置站点名
 #define BUS_REFRESH_SECONDS 120                // 默认拉取间隔（NVS refreshSeconds 可覆盖）
 #define BUS_NTP_SERVER     "pool.ntp.org"      // NTP 服务器
 #define BUS_UTC_OFFSET_SECONDS  (8 * 3600)     // 公交站时区（新加坡/香港均 UTC+8）
 ```
 
 > ⚠️ **No secrets 规则**：提交到 Playground 仓库时不得包含真实 WiFi 密码，必须保留占位符。本地开发改 `bus_config.h` 或直接在设备上配置。
+>
+> `BUS_STOP_ID` / `BUS_STOP_NAME` 特意留空：全新烧录（或擦除 NVS）后首页不再显示预置站点名；Station ID 为空时不会发出无意义的 `?id=` 请求，Bus 页会显示 `Set station in Bus Setup`，直到你保存站点为止。
 
 ### 数据源 API
 
 | 数据源 | 接口 | 解析 |
 | --- | --- | --- |
 | 新加坡 busrouter.sg | `https://arrivelah2.busrouter.sg/?id=<站点ID>` | `services[]` 取 `no`、`next.time`（HH:MM）、`next.duration_ms`（分钟） |
+| 新加坡站点目录 | 多源镜像，按优先级回退：`https://cdn.jsdelivr.net/gh/cheeaun/sgbusdata@main/data/v1/stops.min.json` → `https://raw.githubusercontent.com/cheeaun/sgbusdata/main/data/v1/stops.min.json` → `https://data.busrouter.sg/v1/stops.min.json` | `{"<站码>":[lng,lat,"名称","道路"],...}`；Bus Setup 用它做 ID→名称 与 名称→ID 反查 |
 | 香港 KMB | `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/<站点ID>` | `data[]` 取 `route`、`eta`（ISO 时间，只显示 `eta_seq==1` 的下一班），剩余分钟按 `BUS_UTC_OFFSET_SECONDS` 计算 |
+
+> 新加坡站点目录优先从稳定 RSA 证书的 CDN 镜像（与 `arrivelah2` 同类）下载，原 CloudFront/ECDSA 的 `data.busrouter.sg` 仅作为最后回退，避免边缘握手抖动导致「Station ID lookup failed」。
 
 ## WiFi 配置页详解
 
@@ -176,7 +181,7 @@ SFT z  x  c  v  b  n  m [BS]
 | 触发 | 行为 |
 | --- | --- |
 | 进入页面 | 立即触发一次扫描；从 NVS 回填已保存的 SSID/密码到输入框 |
-| 扫描任务 | 启动延迟 3 秒，之后每 20 秒扫描一次；完成后刷新列表。**若你正在输入（3 秒内点过键），本次扫描只更新列表数据、不重绘页面**，避免 ePaper 全刷打断输入 |
+| 扫描任务 | 启动延迟 3 秒，之后每 20 秒扫描一次，**但只在 WiFi 配置页处于激活状态时运行**（离开页面即暂停扫描，避免打断后台大文件下载/连接）；完成后刷新列表。**若你正在输入（3 秒内点过键），本次扫描只更新列表数据、不重绘页面**，避免 ePaper 全刷打断输入 |
 | 点按输入行 / 列表 / 键盘键 | 更新状态后整页重绘 |
 | WiFi 连接 / 断开事件 | 立即更新 `Connected:` 行并重绘，不用等扫描周期 |
 
